@@ -12,6 +12,6 @@ if __name__ == "__main__":
     dir_pictures()
 
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = MainWindow(dir_pictures())
     window.show()
     sys.exit(app.exec())
