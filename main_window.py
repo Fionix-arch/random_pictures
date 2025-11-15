@@ -5,8 +5,10 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QImage
 from pathlib import Path
 
+from image_view import ImageViewer
 from buttoms.add_buttom import FolderButton
 from buttoms.blur_buttom import BlurButton
+from buttoms.random_pictures_buttom import RandomImageButton
 
 class MainWindow(QMainWindow):
     def __init__(self, path: Path):
@@ -33,6 +35,7 @@ class MainWindow(QMainWindow):
         self.grid.setSpacing(8)
         self.grid.setUniformItemSizes(True)
         self.grid.setWordWrap(True)
+        self.grid.itemActivated.connect(self.open_image_from_item)
         self.setCentralWidget(self.grid)
 
 
@@ -40,8 +43,9 @@ class MainWindow(QMainWindow):
         btn_shuffle   = QPushButton("?")
         btn_shuffle.clicked.connect(self.shuffle_image)
         btn_blur   = BlurButton("*", self.set_blur_enabled ) 
+        btn_random = RandomImageButton("#", self.open_random_image)
 
-        for b in (btn_add, btn_shuffle, btn_blur):
+        for b in (btn_add, btn_shuffle, btn_blur, btn_random):
             b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             row.addWidget(b, 1)   
 
@@ -66,7 +70,7 @@ class MainWindow(QMainWindow):
                         transformMode=Qt.TransformationMode.SmoothTransformation
                     )
 
-                    blur_thumb = self.blur_pixmap(thumb, 8.0)
+                    blur_thumb = self.blur_pixmap(thumb, 25.0)
                     item = QListWidgetItem(QIcon(thumb), path.stem)
                     item.setToolTip(str(path))
 
@@ -117,3 +121,19 @@ class MainWindow(QMainWindow):
                 icon_pix = normal_pix
 
             item.setIcon(QIcon(icon_pix))
+
+    def open_image_from_item(self, item):
+        path = Path(item.toolTip())
+        if not path.exists():
+            return
+        viewer = ImageViewer(path, self)
+        viewer.exec()
+
+    def open_random_image(self):
+        count = self.grid.count()
+        if count == 0:
+            return
+        
+        index = random.randrange(count)
+        item = self.grid.item(index)
+        self.open_image_from_item(item)
