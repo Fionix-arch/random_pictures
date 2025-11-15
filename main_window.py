@@ -1,12 +1,19 @@
 import sys
+import random
 from PyQt6.QtWidgets import QToolBar, QSizePolicy, QMainWindow, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QListView
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap
 from pathlib import Path
 
+from buttoms.add_buttom import FolderButton
+from buttoms.blur_buttom import BlurButton
+
 class MainWindow(QMainWindow):
     def __init__(self, path: Path):
         super().__init__()
+
+        self.path = path
+
         self.resize(500, 300)
 
         toolbar = QToolBar("Top", self)
@@ -19,19 +26,6 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(0,0,0,0)
         row.setSpacing(0)
 
-
-        btn_add = QPushButton("+")
-        btn_1   = QPushButton("?")
-        btn_2   = QPushButton("*") 
-
-        for b in (btn_add, btn_1, btn_2):
-            b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            row.addWidget(b, 1)   
-
-        toolbar.addWidget(bar)
-
-        self.path = path
-
         self.grid = QListWidget()
         self.grid.setViewMode(QListView.ViewMode.IconMode)
         self.grid.setIconSize(QSize(160, 160))
@@ -41,6 +35,18 @@ class MainWindow(QMainWindow):
         self.grid.setWordWrap(True)
         self.setCentralWidget(self.grid)
 
+
+        btn_add = FolderButton("+", self.path, self.load_images)
+        btn_shuffle   = QPushButton("?")
+        btn_shuffle.clicked.connect(self.shuffle_image)
+        btn_blur   = BlurButton("*", self.grid, 50.0) 
+
+        for b in (btn_add, btn_shuffle, btn_blur):
+            b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            row.addWidget(b, 1)   
+
+        toolbar.addWidget(bar)
+ 
         self.load_images()
 
 
@@ -62,5 +68,16 @@ class MainWindow(QMainWindow):
                     item = QListWidgetItem(QIcon(thumb), path.stem)
                     item.setToolTip(str(path))
                     self.grid.addItem(item)
+
+    def shuffle_image(self):
+        item = []
+
+        while self.grid.count() > 0:
+            item.append(self.grid.takeItem(0))
+
+        random.shuffle(item)
+
+        for it in item:
+            self.grid.addItem(it)
 
 
