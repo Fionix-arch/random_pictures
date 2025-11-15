@@ -1,8 +1,8 @@
 import sys
 import random
-from PyQt6.QtWidgets import QToolBar, QSizePolicy, QMainWindow, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QListView
+from PyQt6.QtWidgets import QToolBar, QSizePolicy, QMainWindow, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QListView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QImage
 from pathlib import Path
 
 from buttoms.add_buttom import FolderButton
@@ -39,7 +39,7 @@ class MainWindow(QMainWindow):
         btn_add = FolderButton("+", self.path, self.load_images)
         btn_shuffle   = QPushButton("?")
         btn_shuffle.clicked.connect(self.shuffle_image)
-        btn_blur   = BlurButton("*", self.grid, 50.0) 
+        btn_blur   = BlurButton("*", self.set_blur_enabled ) 
 
         for b in (btn_add, btn_shuffle, btn_blur):
             b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -65,8 +65,13 @@ class MainWindow(QMainWindow):
                         aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio,
                         transformMode=Qt.TransformationMode.SmoothTransformation
                     )
+
+                    blur_thumb = self.blur_pixmap(thumb, 8.0)
                     item = QListWidgetItem(QIcon(thumb), path.stem)
                     item.setToolTip(str(path))
+
+                    item.setData(Qt.ItemDataRole.UserRole, thumb)
+                    item.setData(Qt.ItemDataRole.UserRole + 1, blur_thumb)
                     self.grid.addItem(item)
 
     def shuffle_image(self):
@@ -80,4 +85,35 @@ class MainWindow(QMainWindow):
         for it in item:
             self.grid.addItem(it)
 
+    def blur_pixmap(self, pixmap: QPixmap, radius):
+        if pixmap.isNull():
+            return pixmap
+        
+        self.img = QImage(pixmap.size(), QImage.Format.Format_ARGB32)
+        self.img.fill(Qt.GlobalColor.transparent)
 
+        self.scene = QGraphicsScene()
+        self.item = QGraphicsPixmapItem(pixmap)
+        self.blur = QGraphicsBlurEffect()
+        self.blur.setBlurRadius(radius)
+        self.item.setGraphicsEffect(self.blur)
+        self.scene.addItem(self.item)
+
+        self.painter = QPainter(self.img)
+        self.scene.render(self.painter)
+        self.painter.end()
+
+        return QPixmap.fromImage(self.img)
+
+    def set_blur_enabled(self, enabled):
+        for i in range(self.grid.count()):
+            item = self.grid.item(i)
+            normal_pix = item.data(Qt.ItemDataRole.UserRole)
+            blur_pix = item.data(Qt.ItemDataRole.UserRole + 1)
+
+            if enabled:
+                icon_pix = blur_pix
+            else:
+                icon_pix = normal_pix
+
+            item.setIcon(QIcon(icon_pix))
