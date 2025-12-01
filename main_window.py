@@ -1,4 +1,6 @@
 import sys
+import json
+import os
 import random
 from PyQt6.QtWidgets import QToolBar, QSizePolicy, QMainWindow, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QListView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect
 from PyQt6.QtCore import Qt, QSize
@@ -16,6 +18,10 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.path = path
+        self.cache_dir = self.path / ".cache"
+        self.cache_dir.mkdir(exist_ok=True)
+        self.cache_index_path = self.cache_dir / "thumb.json"
+        self.cache_index = self.load_cache_index()
 
         self.resize(500, 300)
 
@@ -43,45 +49,102 @@ class MainWindow(QMainWindow):
         btn_add = FolderButton("+", self.path, self.load_images)
         btn_shuffle   = QPushButton("?")
         btn_shuffle.clicked.connect(self.shuffle_image)
-        btn_blur   = BlurButton("*", self.set_blur_enabled ) 
         btn_random = RandomImageButton("#", self.open_random_image)
 
-        for b in (btn_add, btn_shuffle, btn_blur, btn_random):
+        for b in (btn_add, btn_shuffle, btn_random):
             b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             row.addWidget(b, 1)   
 
         toolbar.addWidget(bar)
  
+        self.items_by_path: dict[str, QListWidgetItem] = {}
         self.load_images()
 
     def set_wallpaper_from_item(self, item: QListWidgetItem):
         path = Path(item.toolTip())  
         SetWallpaper.set_wallpaper(path)
 
+    def load_cache_index(self):
+        if not self.cache_index_path.exists():
+            return {}
+        try:
+            with self.cache_index_path.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def save_cache_index(self):
+        with self.cache_index_path.open("w", encoding="utf-8") as f:
+            json.dump(self.cache_index, f, ensure_ascii=False, indent=2)
+
+    def get_thumb_with_cache(self, path: Path) -> QPixmap | None:
+        key = str(path)
+        stat = path.stat()
+        mtime = stat.st_mtime
+        size = stat.st_size
+
+        entry = self.cache_index.get(key)
+
+        if entry:
+            if entry.get("mtime") == mtime and entry.get("size") == size:
+                thumb_path = Path(entry["thumb"])
+                if thumb_path.exists():
+                    pix = QPixmap(str(thumb_path))
+                    if not pix.isNull():
+                        return pix 
+
+        pix = QPixmap(str(path))
+        if pix.isNull():
+            return None
+
+        thumb = pix.scaled(
+        self.grid.iconSize(),
+        aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio,
+        transformMode=Qt.TransformationMode.FastTransformation,  
+    )
+
+        thumb_name = f"{hash(key)}.png"  
+        thumb_path = self.cache_dir / thumb_name
+        thumb.save(str(thumb_path), "PNG")
+
+        self.cache_index[key] = {
+        "mtime": mtime,
+        "size": size,
+        "thumb": str(thumb_path),
+    }
+
+        return thumb
 
     def load_images(self):
 
         exts = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
 
-        self.grid.clear()  
+        files = [p for p in self.path.iterdir() if p.is_file() and p.suffix.lower() in exts]
+        files_set = {str(p) for p in files}
+        existing_set = set(self.items_by_path.keys())
 
-        for path in sorted(self.path.iterdir()):
-            if path.is_file() and path.suffix.lower() in exts:
-                pix = QPixmap(str(path))
-                if not pix.isNull():
-                    thumb = pix.scaled(
-                        self.grid.iconSize(),
-                        aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio,
-                        transformMode=Qt.TransformationMode.SmoothTransformation
-                    )
+        for lost in existing_set - files_set:
+            item = self.items_by_path.pop(lost)
+            row = self.grid.row(item)
+            self.grid.takeItem(row)
 
-                    blur_thumb = self.blur_pixmap(thumb, 25.0)
-                    item = QListWidgetItem(QIcon(thumb), path.stem)
-                    item.setToolTip(str(path))
 
-                    item.setData(Qt.ItemDataRole.UserRole, thumb)
-                    item.setData(Qt.ItemDataRole.UserRole + 1, blur_thumb)
-                    self.grid.addItem(item)
+        for path in sorted(files):
+            key = str(path)
+            
+            if key in self.items_by_path:
+                continue
+
+            thumb = self.get_thumb_with_cache(path)
+            if thumb is None:
+                continue
+            item = QListWidgetItem(QIcon(thumb), path.stem)
+            item.setToolTip(str(path))
+
+            item.setData(Qt.ItemDataRole.UserRole, thumb)
+            self.grid.addItem(item)
+            self.items_by_path[key] = item
+        self.save_cache_index()
 
     def shuffle_image(self):
         item = []
@@ -93,39 +156,6 @@ class MainWindow(QMainWindow):
 
         for it in item:
             self.grid.addItem(it)
-
-    def blur_pixmap(self, pixmap: QPixmap, radius):
-        if pixmap.isNull():
-            return pixmap
-        
-        self.img = QImage(pixmap.size(), QImage.Format.Format_ARGB32)
-        self.img.fill(Qt.GlobalColor.transparent)
-
-        self.scene = QGraphicsScene()
-        self.item = QGraphicsPixmapItem(pixmap)
-        self.blur = QGraphicsBlurEffect()
-        self.blur.setBlurRadius(radius)
-        self.item.setGraphicsEffect(self.blur)
-        self.scene.addItem(self.item)
-
-        self.painter = QPainter(self.img)
-        self.scene.render(self.painter)
-        self.painter.end()
-
-        return QPixmap.fromImage(self.img)
-
-    def set_blur_enabled(self, enabled):
-        for i in range(self.grid.count()):
-            item = self.grid.item(i)
-            normal_pix = item.data(Qt.ItemDataRole.UserRole)
-            blur_pix = item.data(Qt.ItemDataRole.UserRole + 1)
-
-            if enabled:
-                icon_pix = blur_pix
-            else:
-                icon_pix = normal_pix
-
-            item.setIcon(QIcon(icon_pix))
 
     def open_image_from_item(self, item):
         path = Path(item.toolTip())

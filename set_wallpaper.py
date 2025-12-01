@@ -45,6 +45,9 @@ class SetWallpaper:
 
         try:
             subprocess.run(["swww", "img", str(path)], check=True)
+            subprocess.run(["wal", "-i", str(path)], check=True)
+            subprocess.run(["swaync-client", "--reload-css"], check=True)
+            subprocess.run(["pywalfox", "update"], check=True)
             return True
         except Exception:
             return False
