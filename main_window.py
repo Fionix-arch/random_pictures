@@ -5,6 +5,7 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QImage
 from pathlib import Path
 
+from set_wallpaper import SetWallpaper
 from image_view import ImageViewer
 from buttoms.add_buttom import FolderButton
 from buttoms.blur_buttom import BlurButton
@@ -35,7 +36,7 @@ class MainWindow(QMainWindow):
         self.grid.setSpacing(8)
         self.grid.setUniformItemSizes(True)
         self.grid.setWordWrap(True)
-        self.grid.itemActivated.connect(self.open_image_from_item)
+        self.grid.itemActivated.connect(self.set_wallpaper_from_item)
         self.setCentralWidget(self.grid)
 
 
@@ -52,6 +53,10 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(bar)
  
         self.load_images()
+
+    def set_wallpaper_from_item(self, item: QListWidgetItem):
+        path = Path(item.toolTip())  
+        SetWallpaper.set_wallpaper(path)
 
 
     def load_images(self):
