@@ -2,8 +2,8 @@ import sys
 import json
 import os
 import random
-from PyQt6.QtWidgets import QToolBar, QSizePolicy, QMainWindow, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QListView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtWidgets import QToolBar, QSizePolicy, QMainWindow, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QListView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect, QInputDialog
+from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QImage
 from pathlib import Path
 
@@ -12,6 +12,7 @@ from image_view import ImageViewer
 from buttoms.add_buttom import FolderButton
 from buttoms.blur_buttom import BlurButton
 from buttoms.random_pictures_buttom import RandomImageButton
+from buttoms.wallpaper_cycle import WallpaperCycler
 
 class MainWindow(QMainWindow):
     def __init__(self, path: Path):
@@ -45,13 +46,17 @@ class MainWindow(QMainWindow):
         self.grid.itemActivated.connect(self.set_wallpaper_from_item)
         self.setCentralWidget(self.grid)
 
+        self.cycler = WallpaperCycler(self.grid, self)
 
         btn_add = FolderButton("+", self.path, self.load_images)
         btn_shuffle   = QPushButton("?")
         btn_shuffle.clicked.connect(self.shuffle_image)
         btn_random = RandomImageButton("#", self.open_random_image)
+        btn_cycle = QPushButton("⟳")
+        btn_cycle.setCheckable(True)
+        btn_cycle.toggled.connect(self.on_cycle_toggled)
 
-        for b in (btn_add, btn_shuffle, btn_random):
+        for b in (btn_add, btn_shuffle, btn_random, btn_cycle):
             b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             row.addWidget(b, 1)   
 
@@ -59,6 +64,27 @@ class MainWindow(QMainWindow):
  
         self.items_by_path: dict[str, QListWidgetItem] = {}
         self.load_images()
+
+    def on_cycle_toggled(self, checked):
+        if checked:
+            seconds, ok = QInputDialog.getInt(
+                self,
+                "Интервал смены обоев",
+            "Каждые сколько секунд менять обои?",
+            value=10,
+            min=1,
+            max=3600,
+
+            )
+            if not ok:
+                sender = self.sender()
+                if sender is not None:
+                    sender.setChecked(False)
+                return
+            self.cycler.start(seconds)
+
+        else:
+            self.cycler.stop()
 
     def set_wallpaper_from_item(self, item: QListWidgetItem):
         path = Path(item.toolTip())  
