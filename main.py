@@ -1,4 +1,8 @@
+import os
 import sys
+import platform
+if platform.system == "Linux" and os.envirop.get("WAYLAND_DISPLAY"):
+    os.envirop.setdefault("QT_QPA_PLATFORM", "wayland")
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 from main_window import MainWindow

@@ -4,7 +4,7 @@ import os
 import random
 from PyQt6.QtWidgets import QToolBar, QSizePolicy, QMainWindow, QWidget, QVBoxLayout, QPushButton, QHBoxLayout, QListWidget, QListWidgetItem, QListView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsBlurEffect, QInputDialog
 from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QIcon, QPixmap, QPainter, QImage
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QImage, QGuiApplication
 from pathlib import Path
 
 from set_wallpaper import SetWallpaper
@@ -17,6 +17,9 @@ from buttoms.wallpaper_cycle import WallpaperCycler
 class MainWindow(QMainWindow):
     def __init__(self, path: Path):
         super().__init__()
+
+        screen = QGuiApplication.primaryScreen()
+        self.dpr = float(screen.devicePixelRatio()) if screen is not None else 1.0
 
         self.path = path
         self.cache_dir = self.path / ".cache"
@@ -117,17 +120,34 @@ class MainWindow(QMainWindow):
                 if thumb_path.exists():
                     pix = QPixmap(str(thumb_path))
                     if not pix.isNull():
+                        if self.dpr > 1.0:
+                            pix.setDevicePixelRatio(self.dpr)
                         return pix 
 
         pix = QPixmap(str(path))
         if pix.isNull():
             return None
 
+        icon_size = self.grid.iconSize()
+
+        if self.dpr > 1.0:
+            print("dpr > 1.0")
+            scaled_size = QSize(
+                int(icon_size.width() * self.dpr),
+                int(icon_size.height() * self.dpr)
+            )
+        else:
+            scaled_size = icon_size
+
         thumb = pix.scaled(
-        self.grid.iconSize(),
+        scaled_size, 
         aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio,
-        transformMode=Qt.TransformationMode.FastTransformation,  
+        transformMode=Qt.TransformationMode.SmoothTransformation,  
     )
+            
+        if self.dpr > 1.0:
+            print("dpr > 1.0")
+            thumb.setDevicePixelRatio(self.dpr)
 
         thumb_name = f"{hash(key)}.png"  
         thumb_path = self.cache_dir / thumb_name
