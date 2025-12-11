@@ -14,6 +14,8 @@ from buttoms.blur_buttom import BlurButton
 from buttoms.random_pictures_buttom import RandomImageButton
 from buttoms.wallpaper_cycle import WallpaperCycler
 
+FOLDER_ROLE = Qt.ItemDataRole.UserRole + 100
+
 class MainWindow(QMainWindow):
     def __init__(self, path: Path):
         super().__init__()
@@ -22,6 +24,7 @@ class MainWindow(QMainWindow):
         self.dpr = float(screen.devicePixelRatio()) if screen is not None else 1.0
 
         self.path = path
+        self.current_path = self.path
         self.cache_dir = self.path / ".cache"
         self.cache_dir.mkdir(exist_ok=True)
         self.cache_index_path = self.cache_dir / "thumb.json"
@@ -46,7 +49,7 @@ class MainWindow(QMainWindow):
         self.grid.setSpacing(8)
         self.grid.setUniformItemSizes(True)
         self.grid.setWordWrap(True)
-        self.grid.itemActivated.connect(self.set_wallpaper_from_item)
+        self.grid.itemActivated.connect(self.on_item_activated)
         self.setCentralWidget(self.grid)
 
         self.cycler = WallpaperCycler(self.grid, self)
@@ -58,8 +61,10 @@ class MainWindow(QMainWindow):
         btn_cycle = QPushButton("⟳")
         btn_cycle.setCheckable(True)
         btn_cycle.toggled.connect(self.on_cycle_toggled)
+        btn_go_back = QPushButton("↑")
+        btn_go_back.clicked.connect(self.go_back)
 
-        for b in (btn_add, btn_shuffle, btn_random, btn_cycle):
+        for b in (btn_add, btn_shuffle, btn_random, btn_cycle, btn_go_back):
             b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             row.addWidget(b, 1)   
 
@@ -67,6 +72,23 @@ class MainWindow(QMainWindow):
  
         self.items_by_path: dict[str, QListWidgetItem] = {}
         self.load_images()
+
+    def go_back(self):
+        if self.current_path == self.path:
+            return
+        self.current_path = self.current_path.parent
+        self.load_images()
+
+    def on_item_activated(self, item):
+        is_folder = item.data(FOLDER_ROLE)
+        path = Path(item.toolTip())
+
+        if is_folder:
+            self.current_path = path
+            self.load_images()
+
+        else:
+            self.set_wallpaper_from_item(item)
 
     def on_cycle_toggled(self, checked):
         if checked:
@@ -163,9 +185,13 @@ class MainWindow(QMainWindow):
 
     def load_images(self):
 
-        exts = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+        self.grid.clear()
+        self.items_by_path.clear()
 
-        files = [p for p in self.path.iterdir() if p.is_file() and p.suffix.lower() in exts]
+        exts = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"}
+        
+        dirs = [p for p in self.current_path.iterdir() if p.is_dir() and not p.name.startswith(".")]
+        files = [p for p in self.current_path.iterdir() if p.is_file() and p.suffix.lower() in exts]
         files_set = {str(p) for p in files}
         existing_set = set(self.items_by_path.keys())
 
@@ -174,6 +200,11 @@ class MainWindow(QMainWindow):
             row = self.grid.row(item)
             self.grid.takeItem(row)
 
+        for d in sorted(dirs):
+            item = QListWidgetItem(QIcon.fromTheme("folder"), d.name)
+            item.setToolTip(str(d))
+            item.setData(FOLDER_ROLE, True)
+            self.grid.addItem(item)
 
         for path in sorted(files):
             key = str(path)
@@ -193,14 +224,20 @@ class MainWindow(QMainWindow):
         self.save_cache_index()
 
     def shuffle_image(self):
-        item = []
+        folders = []
+        images = []
 
-        while self.grid.count() > 0:
-            item.append(self.grid.takeItem(0))
+        while self.grid.count():
+            item = self.grid.takeItem(0)
+            
+            if item.data(FOLDER_ROLE):
+                folders.append(item)
+            else:
+                images.append(item)
 
-        random.shuffle(item)
+        random.shuffle(images)
 
-        for it in item:
+        for it in folders + images:
             self.grid.addItem(it)
 
     def open_image_from_item(self, item):
@@ -211,10 +248,16 @@ class MainWindow(QMainWindow):
         viewer.exec()
 
     def open_random_image(self):
-        count = self.grid.count()
-        if count == 0:
+        items = []
+
+        for i in range(self.grid.count()):
+            item = self.grid.item(i)
+            if item.data(FOLDER_ROLE):
+                continue
+            items.append(item)
+
+        if not items:
             return
-        
-        index = random.randrange(count)
-        item = self.grid.item(index)
+
+        item = random.choice(items)
         self.open_image_from_item(item)
